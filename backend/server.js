@@ -2,13 +2,17 @@
 
 import express from "express";
 import dotenv from "dotenv";
+import cors from "cors"; // Import the cors package
 import "@shopify/shopify-api/adapters/node";
-import { shopifyApi, LATEST_API_VERSION } from "@shopify/shopify-api";
+import { shopifyApi } from "@shopify/shopify-api";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Enable CORS for all routes
+app.use(cors());
 
 const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -20,26 +24,20 @@ const shopify = shopifyApi({
 // Function to fetch product data from Shopify
 const getProduct = async (productId) => {
   try {
-    // Create a session object with the shop name and access token
     const session = {
-      shop: process.env.SHOP_NAME, // Your Shopify store name
-      accessToken: process.env.SHOPIFY_ACCESS_TOKEN, // The access token obtained from OAuth flow
+      shop: process.env.SHOP_NAME,
+      accessToken: process.env.SHOPIFY_ACCESS_TOKEN,
     };
 
-    // Instantiate a new Rest client with the session object
-    const client = new shopify.clients.Rest({
-      session: session, // Pass the session object directly
-    });
-
-    // Make a GET request to fetch product data
+    const client = new shopify.clients.Rest({ session });
     const product = await client.get({
-      path: `products/${productId}.json`, // Ensure to include .json
+      path: `products/${productId}.json`,
       headers: {
-        "X-Shopify-Access-Token": session.accessToken, // Explicitly set the access token header
+        "X-Shopify-Access-Token": session.accessToken,
       },
     });
 
-    console.log("Product Data:", product.body); // Log the product data
+    console.log("Product Data:", product.body);
     return product.body;
   } catch (error) {
     console.error("Error fetching product:", error);
