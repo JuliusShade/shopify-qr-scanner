@@ -1,22 +1,25 @@
-// src/QrScanner.js
-
 import React, { useEffect } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode"; // Ensure this is installed: npm install html5-qrcode
+import { Html5QrcodeScanner } from "html5-qrcode";
+import "./QrScanner.css"; // Import the CSS file
 
 const QrScanner = () => {
   useEffect(() => {
-    const html5QrCodeScanner = new Html5QrcodeScanner("reader", {
-      fps: 10, // Scans per second
-      qrbox: { width: 250, height: 250 }, // Scanning box size
-    });
+    // Initialize only once
+    let html5QrCodeScanner;
+    if (!html5QrCodeScanner) {
+      html5QrCodeScanner = new Html5QrcodeScanner("reader", {
+        fps: 10, // Scans per second
+        qrbox: { width: 250, height: 250 }, // Scanning box size
+      });
+    }
 
     // Set up the QR code scanning success and error handlers
     const onScanSuccess = (decodedText) => {
       console.log(`Scanned URL: ${decodedText}`);
 
       // Map the Ngrok URL to the local backend for testing
-      const ngrokUrl = "insert backend url"; // Your Ngrok URL
-      const localUrl = "insert local host"; // Your local backend URL
+      const ngrokUrl = "https://scanned.page/66de37cf62505"; // Your Ngrok URL
+      const localUrl = "http://localhost:5000/api/product/7218674303065"; // Your local backend URL
 
       // Replace the Ngrok URL with localhost for local testing
       let apiUrl = decodedText.replace(ngrokUrl, localUrl);
@@ -50,6 +53,9 @@ const QrScanner = () => {
             <p><strong>Price:</strong> $${price}</p>
             <img src="${imageUrl}" alt="${title}" style="width: 300px; height: auto;" />
           `;
+
+          // Add animation class to make the product info flow into view
+          productInfo.classList.add("show");
         })
         .catch((error) => console.error("Error fetching product data:", error));
     };
@@ -61,17 +67,19 @@ const QrScanner = () => {
     // Start scanning using Html5QrcodeScanner
     html5QrCodeScanner.render(onScanSuccess, onScanError);
 
-    // Clean up the scanner when the component is unmounted
+    // Clean up the scanner when the component is unmounted to avoid duplication
     return () => {
-      html5QrCodeScanner.clear();
+      if (html5QrCodeScanner) {
+        html5QrCodeScanner.clear();
+      }
     };
   }, []);
 
   return (
-    <div>
+    <div className="qr-scanner-container">
       <h1>QR Code Scanner</h1>
-      <div id="reader" style={{ width: "500px", margin: "0 auto" }}></div>
-      <div id="product-info" style={{ marginTop: "20px" }}></div>
+      <div id="reader"></div>
+      <div id="product-info"></div>
     </div>
   );
 };
