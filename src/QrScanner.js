@@ -14,50 +14,72 @@ const QrScanner = () => {
     }
 
     // Set up the QR code scanning success and error handlers
-    const onScanSuccess = (decodedText) => {
+    const onScanSuccess = async (decodedText) => {
       console.log(`Scanned URL: ${decodedText}`);
 
-      // Map the Ngrok URL to the local backend for testing
-      const ngrokUrl = "https://scanned.page/66de37cf62505"; // Your Ngrok URL
-      const localUrl = "http://localhost:5000/api/product/7218674303065"; // Your local backend URL
+      // Extract the product ID directly from the scanned URL
+      const productId = extractProductId(decodedText);
 
-      // Replace the Ngrok URL with localhost for local testing
-      let apiUrl = decodedText.replace(ngrokUrl, localUrl);
+      if (!productId) {
+        console.error("Failed to extract product ID from the scanned URL.");
+        return;
+      }
 
-      // Fetch data from the modified local URL
-      fetch(apiUrl, {
-        headers: {
-          "ngrok-skip-browser-warning": "true", // Add this header to bypass Ngrok warning if needed
-        },
-      })
-        .then((response) => {
-          const contentType = response.headers.get("content-type");
-          if (!contentType || !contentType.includes("application/json")) {
-            throw new Error("Response is not JSON");
-          }
-          return response.json();
-        })
-        .then((data) => {
-          const product = data.product;
-          const productInfo = document.getElementById("product-info");
+      // Construct the Firebase function URL using the extracted product ID
+      const fetchProductUrl = `https://us-central1-shopify-qr-scanner.cloudfunctions.net/fetchProduct?id=${productId}`;
 
-          // Extract the required details from the response
-          const title = product.title;
-          const price = product.variants[0].price;
-          const imageUrl = product.image.src;
+      try {
+        // Fetch data directly from the Firebase function URL
+        const response = await fetch(fetchProductUrl, {
+          method: "GET",
+          mode: "cors",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
 
-          // Update the UI with the product information
-          productInfo.innerHTML = `
-            <h2>Product Information</h2>
-            <p><strong>Product Title:</strong> ${title}</p>
-            <p><strong>Price:</strong> $${price}</p>
-            <img src="${imageUrl}" alt="${title}" style="width: 300px; height: auto;" />
-          `;
+        // Log the full response details for debugging
+        console.log("Fetch Response:", response);
 
-          // Add animation class to make the product info flow into view
-          productInfo.classList.add("show");
-        })
-        .catch((error) => console.error("Error fetching product data:", error));
+        // Check if the response status is OK
+        if (!response.ok) {
+          // Log the error response status and status text for clarity
+          const errorText = await response.text();
+          throw new Error(
+            `Failed to fetch product data: ${response.status} - ${response.statusText}. Details: ${errorText}`
+          );
+        }
+
+        // Parse the JSON response body
+        const data = await response.json();
+        if (!data || !data.product) {
+          throw new Error("No product data received");
+        }
+
+        console.log("Product Data:", data);
+
+        // Display the product information
+        const product = data.product;
+        const productInfo = document.getElementById("product-info");
+
+        // Extract the required details from the response
+        const title = product.title;
+        const price = product.variants[0].price;
+        const imageUrl = product.image.src;
+
+        // Update the UI with the product information
+        productInfo.innerHTML = `
+          <h2>Product Information</h2>
+          <p><strong>Product Title:</strong> ${title}</p>
+          <p><strong>Price:</strong> $${price}</p>
+          <img src="${imageUrl}" alt="${title}" style="width: 300px; height: auto;" />
+        `;
+
+        // Add animation class to make the product info flow into view
+        productInfo.classList.add("show");
+      } catch (error) {
+        console.error("Error fetching product data:", error);
+      }
     };
 
     const onScanError = () => {
@@ -74,6 +96,13 @@ const QrScanner = () => {
       }
     };
   }, []);
+
+  // Function to extract product ID from the scanned URL
+  const extractProductId = (url) => {
+    // Modify this regex based on the actual structure of your QR code URLs
+    const match = url.match(/id=(\d+)/); // Extract ID directly from query parameter
+    return match ? match[1] : null;
+  };
 
   return (
     <div className="qr-scanner-container">
