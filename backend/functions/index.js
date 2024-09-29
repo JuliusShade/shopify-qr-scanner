@@ -1,25 +1,46 @@
 const functions = require("firebase-functions");
 const fetch = require("node-fetch");
 
-// Function to fetch product data from Shopify with CORS handling
+const shopName = functions.config().shopify.shop_name;
+const accessToken = functions.config().shopify.access_token;
+
+// Fetch location details from Shopify API
+// eslint-disable-next-line require-jsdoc
+async function fetchLocations() {
+  const response = await fetch(
+      `https://${shopName}/admin/api/2024-07/locations.json`,
+      {
+        method: "GET",
+        headers: {
+          "X-Shopify-Access-Token": accessToken,
+          "Content-Type": "application/json",
+        },
+      },
+  );
+  if (!response.ok) {
+    throw new Error(`Error fetching locations: ${response.statusText}`);
+  }
+  const data = await response.json();
+  return data.locations;
+}
+
+// Fetch product data and inventory levels with location names
 exports.fetchProduct = functions.https.onRequest(async (req, res) => {
   // Set CORS headers
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.set("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight request
   if (req.method === "OPTIONS") {
     res.status(204).send("");
     return;
   }
 
   try {
-    const shopName = functions.config().shopify.shop_name;
-    const accessToken = functions.config().shopify.access_token;
     const productId = req.query.id;
 
-    const response = await fetch(
+    // Fetch product data from Shopify
+    const productResponse = await fetch(
         `https://${shopName}/admin/api/2024-07/products/${productId}.json`,
         {
           method: "GET",
@@ -30,55 +51,61 @@ exports.fetchProduct = functions.https.onRequest(async (req, res) => {
         },
     );
 
-    if (!response.ok) {
-      throw new Error(`Error fetching product: ${response.statusText}`);
+    if (!productResponse.ok) {
+      throw new Error(`Error fetching product: ${productResponse.statusText}`);
     }
+    const productData = await productResponse.json();
 
-    const data = await response.json();
-    res.status(200).json(data); // Ensure the response is sent as JSON
-  } catch (error) {
-    console.error("Error fetching product:", error);
-    res.status(500).send(`Error fetching product: ${error.message}`);
-  }
-});
+    // Fetch inventory levels for the product variants
+    const inventoryItemIds = productData.product.variants.map(
+        (variant) => variant.inventory_item_id,
+    );
 
-// Updated proxy function with CORS headers
-exports.proxyScannedUrl = functions.https.onRequest(async (req, res) => {
-  // Set CORS headers
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
+    const inventoryResponse = await fetch(
+        `https://${shopName}/admin/api/2024-07/inventory_levels.json?inventory_item_ids=${inventoryItemIds.join(
+            ",",
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            "X-Shopify-Access-Token": accessToken,
+            "Content-Type": "application/json",
+          },
+        },
+    );
 
-  // Handle preflight request
-  if (req.method === "OPTIONS") {
-    res.status(204).send("");
-    return;
-  }
-
-  try {
-    const scannedUrl = req.query.url;
-
-    if (!scannedUrl) {
-      return res.status(400).send("URL parameter is required.");
-    }
-
-    // Fetch data from the scanned URL
-    const response = await fetch(scannedUrl, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
+    if (!inventoryResponse.ok) {
       throw new Error(
-          `Error fetching data from scanned URL: ${response.statusText}`);
+          `Error fetching inventory levels: ${inventoryResponse.statusText}`,
+      );
     }
 
-    const data = await response.json();
-    res.status(200).send(data);
+    const inventoryData = await inventoryResponse.json();
+
+    // Fetch location data
+    const locations = await fetchLocations();
+
+    // Map location names to inventory levels
+    const inventoryWithLocations = inventoryData.inventory_levels.map(
+        (inventory) => {
+          const location = locations.find(
+              (loc) => loc.id === inventory.location_id,
+          );
+          return {
+            ...inventory,
+            location_name: location ? location.name : "Unknown Location",
+          };
+        },
+    );
+
+    res.status(200).json({
+      product: productData.product,
+      inventory_levels: inventoryWithLocations,
+    });
   } catch (error) {
-    console.error("Error following the scanned URL:", error);
-    res.status(500).send(`Error following the scanned URL: ${error.message}`);
+    console.error("Error fetching product or inventory levels:", error);
+    res.status(500).send(
+        `Error fetching product or inventory levels: ${error.message}`,
+    );
   }
 });

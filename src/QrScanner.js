@@ -1,10 +1,12 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import "./QrScanner.css"; // Import the CSS file
 
 const QrScanner = () => {
+  const [productData, setProductData] = useState(null);
+  const [showInventory, setShowInventory] = useState(false); // State to control inventory dropdown
+
   useEffect(() => {
-    // Initialize only once
     let html5QrCodeScanner;
     if (!html5QrCodeScanner) {
       html5QrCodeScanner = new Html5QrcodeScanner("reader", {
@@ -13,23 +15,18 @@ const QrScanner = () => {
       });
     }
 
-    // Set up the QR code scanning success and error handlers
     const onScanSuccess = async (decodedText) => {
       console.log(`Scanned URL: ${decodedText}`);
 
-      // Extract the product ID directly from the scanned URL
       const productId = extractProductId(decodedText);
-
       if (!productId) {
         console.error("Failed to extract product ID from the scanned URL.");
         return;
       }
 
-      // Construct the Firebase function URL using the extracted product ID
       const fetchProductUrl = `https://us-central1-shopify-qr-scanner.cloudfunctions.net/fetchProduct?id=${productId}`;
 
       try {
-        // Fetch data directly from the Firebase function URL
         const response = await fetch(fetchProductUrl, {
           method: "GET",
           mode: "cors",
@@ -38,58 +35,23 @@ const QrScanner = () => {
           },
         });
 
-        // Log the full response details for debugging
-        console.log("Fetch Response:", response);
-
-        // Check if the response status is OK
         if (!response.ok) {
-          // Log the error response status and status text for clarity
-          const errorText = await response.text();
-          throw new Error(
-            `Failed to fetch product data: ${response.status} - ${response.statusText}. Details: ${errorText}`
-          );
+          throw new Error(`Failed to fetch product data: ${response.status}`);
         }
 
-        // Parse the JSON response body
         const data = await response.json();
-        if (!data || !data.product) {
-          throw new Error("No product data received");
-        }
-
-        console.log("Product Data:", data);
-
-        // Display the product information
-        const product = data.product;
-        const productInfo = document.getElementById("product-info");
-
-        // Extract the required details from the response
-        const title = product.title;
-        const price = product.variants[0].price;
-        const imageUrl = product.image.src;
-
-        // Update the UI with the product information
-        productInfo.innerHTML = `
-          <h2>Product Information</h2>
-          <p><strong>Product Title:</strong> ${title}</p>
-          <p><strong>Price:</strong> $${price}</p>
-          <img src="${imageUrl}" alt="${title}" style="width: 300px; height: auto;" />
-        `;
-
-        // Add animation class to make the product info flow into view
-        productInfo.classList.add("show");
+        setProductData(data);
       } catch (error) {
         console.error("Error fetching product data:", error);
       }
     };
 
     const onScanError = () => {
-      // No error will be logged if no QR code is detected
+      // Handle scan errors here
     };
 
-    // Start scanning using Html5QrcodeScanner
     html5QrCodeScanner.render(onScanSuccess, onScanError);
 
-    // Clean up the scanner when the component is unmounted to avoid duplication
     return () => {
       if (html5QrCodeScanner) {
         html5QrCodeScanner.clear();
@@ -97,18 +59,84 @@ const QrScanner = () => {
     };
   }, []);
 
-  // Function to extract product ID from the scanned URL
   const extractProductId = (url) => {
-    // Modify this regex based on the actual structure of your QR code URLs
-    const match = url.match(/id=(\d+)/); // Extract ID directly from query parameter
+    const match = url.match(/id=(\d+)/);
     return match ? match[1] : null;
+  };
+
+  // Helper function to group inventory levels by variant and location
+  const getInventoryBySize = (product, inventoryLevels) => {
+    return product.variants.map((variant) => {
+      const variantInventory = inventoryLevels.filter(
+        (level) => level.inventory_item_id === variant.inventory_item_id
+      );
+
+      return {
+        size: variant.title,
+        locations: variantInventory.map((inventory) => ({
+          location_name: inventory.location_name, // Assuming location_name is part of the response from the backend
+          available: inventory.available,
+        })),
+      };
+    });
+  };
+
+  // Toggles the dropdown for the entire inventory section
+  const toggleInventoryDropdown = () => {
+    setShowInventory((prevShowInventory) => !prevShowInventory);
   };
 
   return (
     <div className="qr-scanner-container">
       <h1>QR Code Scanner</h1>
       <div id="reader"></div>
-      <div id="product-info"></div>
+
+      {productData && (
+        <div id="product-info">
+          <h2>Product Information</h2>
+          <p>
+            <strong>Product Title:</strong> {productData.product.title}
+          </p>
+          <p>
+            <strong>Price:</strong> ${productData.product.variants[0].price}
+          </p>
+          <img
+            src={productData.product.image.src}
+            alt={productData.product.title}
+            style={{ width: "300px", height: "auto" }}
+          />
+
+          {/* Inventory Dropdown */}
+          <h3>Inventory Levels</h3>
+          <button
+            onClick={toggleInventoryDropdown}
+            style={{ marginBottom: "10px", cursor: "pointer" }}
+          >
+            {showInventory ? "Hide" : "Show"} Inventory Levels
+          </button>
+
+          {showInventory && (
+            <div className="inventory-details" style={{ marginLeft: "20px" }}>
+              {getInventoryBySize(
+                productData.product,
+                productData.inventory_levels
+              ).map((variant) => (
+                <div key={variant.size}>
+                  <strong>Size: {variant.size}</strong>
+                  <ul>
+                    {variant.locations.map((location, index) => (
+                      <li key={index}>
+                        Location: {location.location_name}, Available:{" "}
+                        {location.available}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
