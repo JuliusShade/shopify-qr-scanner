@@ -90,7 +90,6 @@ const QrScanner = () => {
     return match ? match[1] : null;
   };
 
-  // Helper function to group inventory levels by variant and filter by location
   const getInventoryBySize = (product, inventoryLevels) => {
     // Filter inventory levels for the current location and exclude "Overstock"
     const filteredInventoryLevels = inventoryLevels.filter(
@@ -99,19 +98,20 @@ const QrScanner = () => {
         level.location_name === currentLocation
     );
 
-    return product.variants.map((variant) => {
-      const variantInventory = filteredInventoryLevels.filter(
-        (level) => level.inventory_item_id === variant.inventory_item_id
-      );
+    // Map through variants to filter sizes with inventory > 0
+    const availableSizes = product.variants
+      .filter((variant) => {
+        const variantInventory = filteredInventoryLevels.find(
+          (level) => level.inventory_item_id === variant.inventory_item_id
+        );
+        return variantInventory && variantInventory.available > 0;
+      })
+      .map((variant) => variant.title);
 
-      return {
-        size: variant.title,
-        locations: variantInventory.map((inventory) => ({
-          location_name: inventory.location_name, // Assuming location_name is part of the response from the backend
-          available: inventory.available,
-        })),
-      };
-    });
+    // Return a single string of sizes
+    return availableSizes.length > 0
+      ? `Available Sizes: ${availableSizes.join(", ")}`
+      : "No inventory available for the selected location.";
   };
 
   // Toggles the dropdown for the inventory section
@@ -128,7 +128,6 @@ const QrScanner = () => {
       {/* Header with logo and title */}
       <div className="qr-scanner-header">
         <img src={TopLeftImage} alt="Store Logo" className="header-logo" />
-        <h1>QR Code Scanner</h1>
       </div>
       <div id="reader"></div>
 
@@ -178,22 +177,12 @@ const QrScanner = () => {
 
           {showInventory && currentLocation && (
             <div className="inventory-details" style={{ marginLeft: "20px" }}>
-              {getInventoryBySize(
-                productData.product,
-                productData.inventory_levels
-              ).map((variant) => (
-                <div key={variant.size}>
-                  <strong>Size: {variant.size}</strong>
-                  <ul>
-                    {variant.locations.map((location, index) => (
-                      <li key={index}>
-                        Location: {location.location_name}, Available:{" "}
-                        {location.available}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+              <p>
+                {getInventoryBySize(
+                  productData.product,
+                  productData.inventory_levels
+                )}
+              </p>
             </div>
           )}
         </div>
