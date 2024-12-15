@@ -20,7 +20,7 @@ const fetchAllProducts = async () => {
 
     let allProducts = [];
     let nextPage = null;
-    let url = `https://${shopName}/admin/api/2024-07/products.json?limit=250`; // Shopify API endpoint
+    let url = `https://${shopName}/admin/api/2024-07/productss.json?limit=250`; // Shopify API endpoint
 
     while (url) {
       const response = await fetch(url, {
