@@ -30,7 +30,7 @@ const QrScanner = () => {
         return;
       }
 
-      const fetchProductUrl = `https://us-central1-shopify-qr-scanner.cloudfunctions.net/fetchProduct?id=${productId}`;
+      const fetchProductUrl = `https://us-central1-shopify-qr-scanner.cloudfunctions.net/fetchProducts?id=${productId}`;
 
       try {
         const response = await fetch(fetchProductUrl, {
